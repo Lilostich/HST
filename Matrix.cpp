@@ -2,6 +2,7 @@
 // Created by Dan on 30.11.2022.
 //
 #include <fcntl.h>
+#include <omp.h>
 
 #include "Matrix.h"
 
@@ -38,6 +39,7 @@ std::vector<double> Matrix::multiply(std::vector<double> rightVector) {
         std::vector<double> res;
         res.resize(size);
         int j = 0;
+#pragma omp parallel for private(j) default(none) shared(res,_size,rightVector,_values) num_threads(8)
         for (int i = 0; i < _size; i++){
             res[i] = 0;
             for (j = 0; j < _size; j++){
