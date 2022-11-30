@@ -3,5 +3,5 @@ project(MyVector)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(MyVector main.cpp)
+add_executable(MyVector main.cpp Matrix.cpp Matrix.h)
 add_executable(Generator generator.cpp)
