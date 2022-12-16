@@ -20,28 +20,12 @@ Matrix::Matrix(std::string fileName) {
     fclose(fd);
 }
 
-
-
-Matrix::Matrix(std::vector<double> matr) :values(matr){size = sqrt(matr.size());}
-
-void Matrix::initSize(int n) {values.reserve(n*n); size = n*n;}
-
-double &Matrix::getValue(int i, int j) {return values[j + i * size];}
-
 std::vector<double> Matrix::multiply(std::vector<double> rightVector) {
     int rank,numProc;
-    const int argc = 3;
-    char first[] = "";
-    char sec[] = "-n";
-    char third[] = "2";
-    char * all[] = {first,sec,third};
-    char ** argv = all;
-//    char** argvv = {"","-n","2"};
-    MPI_Init(&argc,&argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);// get current process number
     MPI_Comm_size(MPI_COMM_WORLD, &numProc);// get ammount of processes
-    printf("size is %d",numProc);
-    printf("rank is %d",rank);
+//    printf("size is %d\n",numProc);
+    printf("rank is %d of %d\n",rank, numProc);
     std::vector<double> _values(values);
     std::vector<double> res;
     res.resize(size);
@@ -55,28 +39,41 @@ std::vector<double> Matrix::multiply(std::vector<double> rightVector) {
         // 6. Вывести
 
         // 1
+        double *rightVector_c = (double*)malloc(sizeof(double) * size);
+        for(int i = 0; i < size; i++){
+            rightVector_c[i] = rightVector[i];
+        }
         for (int i = 1; i < numProc; i++) {
             // вектор
-            MPI_Send(rightVector.data(),
+            MPI_Send((void*)rightVector_c,
                     size,
                     MPI_DOUBLE,
                     i,
                     0,
                     MPI_COMM_WORLD);
+            printf("rv is %d",rightVector_c);
         }
+        free(rightVector_c);
+
         for (int i = 0; i < size ; i++){
             int dest = (i%(numProc - 1))+1;
-            std::vector<double> strMatrix;
-            strMatrix.insert(strMatrix.begin(),
-                             values.begin() + i * size,
-                             values.begin() + (i + 1) * size);
+//            std::vector<double> strMatrix;
+            double * strMatrix = (double*)malloc(sizeof(double) * size);
+            for(int j = 0; j < size; j++){
+                strMatrix[j] = values[i * size + j];
+            }
+//            strMatrix.insert(strMatrix.begin(),
+//                             values.begin() + i * size,
+//                             values.begin() + (i + 1) * size);
+            printf("str is %d",strMatrix);
             // iя - строка матрицы
-            MPI_Send(strMatrix.data(),
+            MPI_Send(strMatrix,
                     size,
                     MPI_DOUBLE,
                     dest,
                     i/(numProc - 1)+1,
                     MPI_COMM_WORLD);
+            free(strMatrix);
 
         }
         // 5
@@ -114,19 +111,7 @@ std::vector<double> Matrix::multiply(std::vector<double> rightVector) {
                     MPI_COMM_WORLD);
         }
     }
-    MPI_Finalize();
+//    MPI_Finalize();
     //6
     return res;
-}
-
-void Matrix::save(std::string fileName) {
-    std::ofstream fd;
-
-    fd.open(fileName);
-    fd << this->size << " ";
-    for(int i = 0; i < size; i++){
-        for (int j = 0; j < size; j++){
-            fd << values[i * size + j] << " ";
-        }
-    }
 }
