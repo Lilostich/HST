@@ -8,7 +8,7 @@
 #include <vector>
 #include <math.h>
 #include <time.h>
-#include <omp.h>
+#include <mpi.h>
 #include <fstream>
 
 

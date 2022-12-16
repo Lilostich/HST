@@ -2,8 +2,6 @@
 // Created by Dan on 30.11.2022.
 //
 #include <fcntl.h>
-#include <mpi.h>
-
 #include "Matrix.h"
 
 Matrix::Matrix(std::string fileName) {
@@ -32,11 +30,19 @@ double &Matrix::getValue(int i, int j) {return values[j + i * size];}
 
 std::vector<double> Matrix::multiply(std::vector<double> rightVector) {
     int rank,numProc;
-    MPI_Init(0, 0);
+    const int argc = 3;
+    char first[] = "";
+    char sec[] = "-n";
+    char third[] = "2";
+    char * all[] = {first,sec,third};
+    char ** argv = all;
+//    char** argvv = {"","-n","2"};
+    MPI_Init(&argc,&argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);// get current process number
     MPI_Comm_size(MPI_COMM_WORLD, &numProc);// get ammount of processes
+    printf("size is %d",numProc);
+    printf("rank is %d",rank);
     std::vector<double> _values(values);
-    int _size = this->size;
     std::vector<double> res;
     res.resize(size);
 
@@ -76,8 +82,10 @@ std::vector<double> Matrix::multiply(std::vector<double> rightVector) {
         // 5
         for (int i = 0; i < size; i++){
             int dest = (i%(numProc - 1))+1;
-            MPI_Recv(res[i], 1, MPI_DOUBLE,
+            double value;
+            MPI_Recv(&value, 1, MPI_DOUBLE,
                      dest, i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            res[i] = value;
         }
     } else { // Child processes
         int countStrs = size / (numProc-1) + (rank <= size % (numProc - 1) ? 1 : 0);
@@ -98,7 +106,7 @@ std::vector<double> Matrix::multiply(std::vector<double> rightVector) {
                     cellValue += rVector[j] * matrStr[j];
             }
             // 4
-            MPI_Send(cellValue,
+            MPI_Send(&cellValue,
                     1,
                     MPI_DOUBLE,
                     0, // (rank - 1) + (msgTag - 1) * (numProc - 1)
