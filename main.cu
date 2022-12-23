@@ -50,21 +50,14 @@ Matrix::Matrix(std::string fileName) {
 ///
 __global__ void kernelMultiply(double *matrix, double *vect, double *result,double* debug, int size){
     int tid = (threadIdx.x + blockIdx.x * blockDim.x)%size;
+    int i = threadIdx.x;
+    int j = blockIdx.x;
+    result[i] += matrix[i * size + j] * vect[j];
+
     debug[0] = threadIdx.x;
     debug[1] = blockIdx.x;
     debug[2] = blockDim.x;
     debug[3] = 5.6;
-    int i;
-    if (tid >= size) {
-        return;
-    }
-    result[tid] = 0.;
-    double res = 0;
-    for (i = 0; i < size; i++){
-        res += matrix[tid * size + i] * vect[i];
-    }
-    result[tid] = res;
-    debug[4] = res;
     debug[5] = tid;
     debug[6] = matrix[tid * size + 0];
     debug[7] = vect[0];
@@ -88,7 +81,6 @@ std::vector<double> Matrix::multiply(std::vector<double> rightVector,time_t *tim
     double *matrix = (double*)malloc(sizeof(double) * size * size);
     double *result = (double*)malloc(sizeof(double) * size);
 
-
     double *d_rVector, *d_matrix, *d_result;
 
 //    for(int ii = 0; ii < res.size(); ii++){
@@ -97,6 +89,7 @@ std::vector<double> Matrix::multiply(std::vector<double> rightVector,time_t *tim
 
     for(int i = 0; i < size; i++){
         rVector[i] = rightVector[i];
+        result[i] = 0;
 //        if(i < 10)
 //            std::cout << rVector[i] << " ";
     }
@@ -129,7 +122,7 @@ std::vector<double> Matrix::multiply(std::vector<double> rightVector,time_t *tim
     cudaMalloc((void**)&d_debug,sizeof(double) * 10);
     cudaMemcpy(d_debug,debug,sizeof(double) * 10, cudaMemcpyHostToDevice);
     time_t first = clock();
-    kernelMultiply <<<size, 1 >>> (d_matrix, d_rVector, d_result, d_debug, size);
+    kernelMultiply <<<size, size >>> (d_matrix, d_rVector, d_result, d_debug, size);
     time_t end = clock();
 
     cudaMemcpy(debug,d_debug,sizeof(double) * 10, cudaMemcpyDeviceToHost);
@@ -313,3 +306,11 @@ int main(int argc, char *argv[])
     return EXIT_SUCCESS;
 }
 
+/*
+time is 166
+time is 23
+time is 111
+time is 246
+time is 688
+time is 1274
+ */
