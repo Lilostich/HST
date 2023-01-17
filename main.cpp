@@ -2,6 +2,8 @@
 
 #include "Matrix.h"
 
+extern double multiply_str_str(std::vector<double> &values, std::vector<double> &rightVector,time_t *time);
+
 const double ACCURACY = 0.00001;
 const std::string fileNames[] {"matrixFile10.txt",
                          "matrixFile50.txt",
@@ -73,13 +75,6 @@ void sendToChild(std::vector<double> &rv,int size){
                  i,
                  0,
                  MPI_COMM_WORLD);
-//        MPI_Send(&size,
-//                 1,
-//                 MPI_INT,
-//                 i,
-//                 1,
-//                 MPI_COMM_WORLD);
-//        printf("rv is %d",rightVector_c);
     }
     free(rightVector_c);
 }
@@ -93,7 +88,6 @@ void sendMatrixToChild(Matrix &matr){
         for(int j = 0; j < matr.size; j++){
             strMatrix[j] = matr.values[i * matr.size + j];
         }
-//        printf("str is %d",strMatrix);
         // iя - строка матрицы
         MPI_Send(strMatrix,
                  matr.size,
@@ -176,9 +170,11 @@ int main(int argc, char *argv[])
 
                 double cellValue = 0;
                 // 3 Умножение строки матрицы на вектор
-                for (int j = 0; j < size; j++) {
-                    cellValue += rVector[j] * matrStr[j];
-                }
+                time_t time;
+                cellValue = multiply_str_str(rVector, matrStr,&time);
+//                for (int j = 0; j < size; j++) {
+//                    cellValue += rVector[j] * matrStr[j];
+//                }
                 // 4
                 MPI_Send(&cellValue,
                          1,
