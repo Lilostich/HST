@@ -1,8 +1,131 @@
 #include <iostream>
+#include <vector>
+#include <math.h>
+#include <time.h>
+#include <mpi.h>
+#include <fstream>
 
-#include "Matrix.h"
 
-extern double multiply_str_str(std::vector<double> &values, std::vector<double> &rightVector,time_t *time);
+class Matrix {
+public:
+    Matrix(std::string fileName){
+        FILE *fd;
+
+        fd = fopen(fileName.c_str(),"r+b");
+        fscanf(fd,"%d ",&size);
+        double cell = 0;
+        for (int i = 0; i < size; i++){
+            for (int j = 0; j < size; j++){
+                fscanf(fd,"%lf ",&cell);
+                values.push_back(cell);
+            }
+        }
+
+        fclose(fd);
+    }
+    Matrix(){}
+
+    std::vector<double> multiply(std::vector<double> rightVector){
+    int rank,numProc;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);// get current process number
+    MPI_Comm_size(MPI_COMM_WORLD, &numProc);// get ammount of processes
+//    printf("size is %d\n",numProc);
+    printf("rank is %d of %d\n",rank, numProc);
+    std::vector<double> _values(values);
+    std::vector<double> res;
+    res.resize(size);
+
+    if (0 == rank){
+        // 1. Отослать на другие процессы
+        // 2. Принять там сообщение
+        // 3. Провести работу,
+        // 4. Отослать обратно
+        // 5. Объединить присланные обратно результаты
+        // 6. Вывести
+
+        // 1
+        double *rightVector_c = (double*)malloc(sizeof(double) * size);
+        for(int i = 0; i < size; i++){
+            rightVector_c[i] = rightVector[i];
+        }
+        for (int i = 1; i < numProc; i++) {
+            // вектор
+            MPI_Send((void*)rightVector_c,
+                    size,
+                    MPI_DOUBLE,
+                    i,
+                    0,
+                    MPI_COMM_WORLD);
+            printf("rv is %d",rightVector_c);
+        }
+        free(rightVector_c);
+
+        for (int i = 0; i < size ; i++){
+            int dest = (i%(numProc - 1))+1;
+//            std::vector<double> strMatrix;
+            double * strMatrix = (double*)malloc(sizeof(double) * size);
+            for(int j = 0; j < size; j++){
+                strMatrix[j] = values[i * size + j];
+            }
+//            strMatrix.insert(strMatrix.begin(),
+//                             values.begin() + i * size,
+//                             values.begin() + (i + 1) * size);
+            printf("str is %d",strMatrix);
+            // iя - строка матрицы
+            MPI_Send(strMatrix,
+                    size,
+                    MPI_DOUBLE,
+                    dest,
+                    i/(numProc - 1)+1,
+                    MPI_COMM_WORLD);
+            free(strMatrix);
+
+        }
+        // 5
+        for (int i = 0; i < size; i++){
+            int dest = (i%(numProc - 1))+1;
+            double value;
+            MPI_Recv(&value, 1, MPI_DOUBLE,
+                     dest, i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            res[i] = value;
+        }
+    } else { // Child processes
+        int countStrs = size / (numProc-1) + (rank <= size % (numProc - 1) ? 1 : 0);
+        // 2
+        double *rVector = (double*)malloc(sizeof(double)*size);
+        double *matrStr = (double*)malloc(sizeof(double)*size);
+
+        MPI_Recv(rVector,size,MPI_DOUBLE,0,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+        // i - message Tag
+        for (int i = 1; i <= countStrs; i++){
+
+            MPI_Recv(matrStr,size,MPI_DOUBLE,0,i,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+            double cellValue = 0;
+            // 3 Умножение строки матрицы на вектор
+            for (int j = 0; j < size; j++){
+                    cellValue += rVector[j] * matrStr[j];
+            }
+            // 4
+            MPI_Send(&cellValue,
+                    1,
+                    MPI_DOUBLE,
+                    0, // (rank - 1) + (msgTag - 1) * (numProc - 1)
+                    (rank - 1) + (i - 1) * (numProc - 1), // снова превратить в номер строки
+                    MPI_COMM_WORLD);
+        }
+    }
+    //6
+    return res;
+}
+
+    std::vector<double> values;
+    int size;
+};
+
+
+extern double multiply_str_str(double *leftVector, double *rightVector,int size, time_t *time);
 
 const double ACCURACY = 0.00001;
 const std::string fileNames[] {"matrixFile10.txt",
@@ -75,6 +198,8 @@ void sendToChild(std::vector<double> &rv,int size){
                  i,
                  0,
                  MPI_COMM_WORLD);
+        printf("Send right vector %d->%d as [%lf, %lf,...](size is %d)\n",
+                0,i,rightVector_c[0],rightVector_c[1],size);
     }
     free(rightVector_c);
 }
@@ -84,7 +209,7 @@ void sendMatrixToChild(Matrix &matr){
     MPI_Comm_size(MPI_COMM_WORLD, &numProc);// get current process number
     double * strMatrix = (double*)malloc(sizeof(double) * matr.size);
     for (int i = 0; i < matr.size ; i++){
-        int dest = (i%(numProc - 1))+1;
+        int dest = (i % (numProc - 1)) + 1;
         for(int j = 0; j < matr.size; j++){
             strMatrix[j] = matr.values[i * matr.size + j];
         }
@@ -93,8 +218,11 @@ void sendMatrixToChild(Matrix &matr){
                  matr.size,
                  MPI_DOUBLE,
                  dest,
-                 i/(numProc - 1)+1,
+                 i / (numProc - 1) + 1,
                  MPI_COMM_WORLD);
+        if (i < 10)
+            printf("Send left vector %d->%d as [%lf, %lf,...](size is %d)\n",
+                0, dest, strMatrix[0], strMatrix[1], matr.size);
 
     }
     free(strMatrix);
@@ -105,10 +233,12 @@ void collectResults(std::vector<double> &result,int size){
     MPI_Comm_size(MPI_COMM_WORLD, &numProc);// get current process number
 
     for (int i = 0; i < size; i++){
-        int dest = (i%(numProc - 1))+1;
+        int dest = (i%(numProc - 1)) + 1;
         double value;
         MPI_Recv(&value, 1, MPI_DOUBLE,
                  dest, i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        if (i < 10)
+            printf("Collect result from %d proc (value is %lf)\n",dest,value);
         result[i] = value;
     }
 }
@@ -116,13 +246,19 @@ void collectResults(std::vector<double> &result,int size){
 int main(int argc, char *argv[])
 {
 
-
     MPI_Init(&argc,&argv);
     int rank,numProc;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);// get current process number
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);   // get current process number
     MPI_Comm_size(MPI_COMM_WORLD, &numProc);// get ammount of processes
+    printf("rank is %d, numProc is %d\n", rank, numProc);
+
     if (rank == 0){
-        std::string filenameactual = fileNames[CHOICE];
+        
+        std::string filenameactual;
+        if (argc > 1)
+            filenameactual = argv[1];
+        else
+            filenameactual = fileNames[CHOICE];
         std::vector<double> myVector;
         printf("start 0 process\n");
         Matrix matr(filenameactual);
@@ -133,7 +269,8 @@ int main(int argc, char *argv[])
         time1 = MPI_Wtime();
         time3 = clock();
         for (int i = 0; i < MAX_ITERATION; i++){
-                rvold = rv;
+                
+            rvold = rv;
 
             sendToChild(rvold,matr.size);
 
@@ -142,6 +279,8 @@ int main(int argc, char *argv[])
             collectResults(rv,matr.size);
 
             rv = _div(rv, _dist(rv));
+
+            printf("Vector rv after div %d iteration is [%lf, %lf, ...]]", i , rv[0], rv[1]);
 
             if (isVectorsNear(rv,rvold))
                 break;
@@ -153,7 +292,9 @@ int main(int argc, char *argv[])
         saveVector(rv,filenameactual);
 
     } else {
+        
         while(1){
+            bool onlyFirst = true;
             int size = sizeMatrix[CHOICE];
 
             int countStrs = size / (numProc-1) + (rank <= size % (numProc - 1) ? 1 : 0);
@@ -162,19 +303,26 @@ int main(int argc, char *argv[])
             double *matrStr = (double*)malloc(sizeof(double)*size);
 
             MPI_Recv(rVector,size,MPI_DOUBLE,0,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+            printf("Proc %d take rVector as [%lf, %lf, ...]\n", rank, rVector[0], rVector[1]);
 
             // i - message Tag
             for (int i = 1; i <= countStrs; i++) {
 
                 MPI_Recv(matrStr, size, MPI_DOUBLE, 0, i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                if (i < 11)
+                    printf("Proc %d take lvector as [%lf, %lf, ...]\n", rank, matrStr[0], matrStr[1]);
 
                 double cellValue = 0;
                 // 3 Умножение строки матрицы на вектор
                 time_t time;
-                cellValue = multiply_str_str(rVector, matrStr,&time);
+                cellValue = multiply_str_str(rVector, matrStr,size,&time);
 //                for (int j = 0; j < size; j++) {
 //                    cellValue += rVector[j] * matrStr[j];
 //                }
+                if (onlyFirst) {
+                    printf("Proc %d solve cell value as %lf\n", rank, cellValue);
+                    onlyFirst = false;
+                }
                 // 4
                 MPI_Send(&cellValue,
                          1,
@@ -187,17 +335,5 @@ int main(int argc, char *argv[])
     }
 
     MPI_Finalize();
-
-
-    return EXIT_SUCCESS;
-
-
-
-
-
-
-
-
-
-
+    return 0;
 }

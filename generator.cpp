@@ -3,6 +3,8 @@
 //
 #include <math.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string>
 
 /// @param[in] fileSize - размер файла в мб
@@ -16,7 +18,7 @@ void generateMatrixInFile(std::string fileName, int fileSize){
     fprintf(fd,"%d ",matrixSize);
     for (int i = 0; i < matrixSize; i++){
         for (int j = 0; j < matrixSize; j++)
-            fprintf(fd,"%lf ",double(rand()));
+            fprintf(fd,"%lf ",double(rand()%1000));
     }
     fclose(fd);
 }
