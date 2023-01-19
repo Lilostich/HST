@@ -127,18 +127,18 @@ public:
 
 extern double multiply_str_str(double *leftVector, double *rightVector,int size, time_t *time);
 
-const double ACCURACY = 0.00001;
+const double ACCURACY = 0.0000000000001;
 const std::string fileNames[] {"matrixFile10.txt",
                          "matrixFile50.txt",
                          "matrixFile100.txt",
                          "matrixFile250.txt",
                          "matrixFile500.txt"};
 const size_t FILE_COUNT = 5;
-const size_t MAX_ITERATION = 100;
+const size_t MAX_ITERATION = 1000;
 
 const int sizeMatrix[] {1144,2560,3620, 5724, 8095};
 
-#define CHOICE 4
+#define CHOICE 0
 
 /// Длина вектора
 double _dist(const std::vector<double> &rv){
@@ -184,23 +184,30 @@ void saveVector(std::vector<double> &myVector, std::string fileName) {
 
 void sendToChild(std::vector<double> &rv,int size){
     double *rightVector_c = (double*)malloc(sizeof(double) * size);
+    int a = 0;
+    // printf("%d\n", a++);
     for(int i = 0; i < size; i++){
         rightVector_c[i] = rv[i];
     }
+    // printf("%d\n", a++);
     int numProc;
     MPI_Comm_size(MPI_COMM_WORLD, &numProc);// get current process number
+    // printf("%d\t%d\n",a++, numProc);
 
     for (int i = 1; i < numProc; i++) {
         // вектор
+        // printf("\t%d\n",i);
         MPI_Send((void*)rightVector_c,
                  size,
                  MPI_DOUBLE,
                  i,
                  0,
                  MPI_COMM_WORLD);
-        printf("Send right vector %d->%d as [%lf, %lf,...](size is %d)\n",
-                0,i,rightVector_c[0],rightVector_c[1],size);
+        // printf("Send right vector %d->%d as [%lf, %lf,...](size is %d)\n",
+                // 0,i,rightVector_c[0],rightVector_c[1],size);
     }
+    // printf("%d\n", a);
+
     free(rightVector_c);
 }
 
@@ -220,9 +227,9 @@ void sendMatrixToChild(Matrix &matr){
                  dest,
                  i / (numProc - 1) + 1,
                  MPI_COMM_WORLD);
-        if (i < 10)
-            printf("Send left vector %d->%d as [%lf, %lf,...](size is %d)\n",
-                0, dest, strMatrix[0], strMatrix[1], matr.size);
+        // if (i < 10)
+            // printf("Send left vector %d->%d as [%lf, %lf,...](size is %d)\n",
+                // 0, dest, strMatrix[0], strMatrix[1], matr.size);
 
     }
     free(strMatrix);
@@ -238,9 +245,10 @@ void collectResults(std::vector<double> &result,int size){
         MPI_Recv(&value, 1, MPI_DOUBLE,
                  dest, i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         if (i < 10)
-            printf("Collect result from %d proc (value is %lf)\n",dest,value);
+        // printf("Collect result from %d(%d) proc (value is %lf)\n",dest,i,value);
         result[i] = value;
     }
+    // printf("all collected!\n");
 }
 
 int main(int argc, char *argv[])
@@ -260,7 +268,7 @@ int main(int argc, char *argv[])
         else
             filenameactual = fileNames[CHOICE];
         std::vector<double> myVector;
-        printf("start 0 process\n");
+        // printf("start 0 process\n");
         Matrix matr(filenameactual);
         std::vector<double> rv,rvold;
         initRand(rv,matr.size);
@@ -268,22 +276,38 @@ int main(int argc, char *argv[])
         time_t time3,time4;
         time1 = MPI_Wtime();
         time3 = clock();
+        bool first_time = true;
         for (int i = 0; i < MAX_ITERATION; i++){
-                
+            // printf("iteration %d\n",i);    
             rvold = rv;
+            // printf("rvold = rv\n",i);    
 
+            if (first_time){
+                first_time = false;
+                
+            }
             sendToChild(rvold,matr.size);
+            // printf("sendTochild\n",i);    
 
             sendMatrixToChild(matr);
+            // printf("sendMatrixTochild\n",i);    
 
             collectResults(rv,matr.size);
+            // printf("Collect success\n",i);    
 
-            rv = _div(rv, _dist(rv));
+            double dist = _dist(rv);
+            // printf("dist is %lf\n",dist);
 
-            printf("Vector rv after div %d iteration is [%lf, %lf, ...]]", i , rv[0], rv[1]);
+            rv = _div(rv, dist);
 
-            if (isVectorsNear(rv,rvold))
+            // printf("Vector rv after div %d iteration is [%lf, %lf, ...]]", i , rv[0], rv[1]);
+
+            if (isVectorsNear(rv,rvold)){
+                // printf("near!\n");
                 break;
+            }
+            if (i == 999)
+                printf("999!\n");
         }
         time2 = MPI_Wtime();
         time4 = clock();
@@ -295,22 +319,32 @@ int main(int argc, char *argv[])
         
         while(1){
             bool onlyFirst = true;
+            int st = 0;
             int size = sizeMatrix[CHOICE];
+
+            if (argc > 2)
+                size = atoi(argv[2]);
+            else
+                size = sizeMatrix[CHOICE];
 
             int countStrs = size / (numProc-1) + (rank <= size % (numProc - 1) ? 1 : 0);
             // 2
+            // printf("Proc %d step %d\n",rank,st++);
+
             double *rVector = (double*)malloc(sizeof(double)*size);
             double *matrStr = (double*)malloc(sizeof(double)*size);
+            // printf("Proc %d step %d\n",rank,st++);
 
             MPI_Recv(rVector,size,MPI_DOUBLE,0,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-            printf("Proc %d take rVector as [%lf, %lf, ...]\n", rank, rVector[0], rVector[1]);
+            // printf("Proc %d take rVector as [%lf, %lf, ...]\n", rank, rVector[0], rVector[1]);
 
             // i - message Tag
+            // printf("Proc %d step %d\n",rank,st++);
             for (int i = 1; i <= countStrs; i++) {
 
                 MPI_Recv(matrStr, size, MPI_DOUBLE, 0, i, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                if (i < 11)
-                    printf("Proc %d take lvector as [%lf, %lf, ...]\n", rank, matrStr[0], matrStr[1]);
+                // if (i < 11)
+                    // printf("Proc %d take lvector as [%lf, %lf, ...]\n", rank, matrStr[0], matrStr[1]);
 
                 double cellValue = 0;
                 // 3 Умножение строки матрицы на вектор
@@ -320,7 +354,7 @@ int main(int argc, char *argv[])
 //                    cellValue += rVector[j] * matrStr[j];
 //                }
                 if (onlyFirst) {
-                    printf("Proc %d solve cell value as %lf\n", rank, cellValue);
+                    // printf("Proc %d solve cell value as %lf\n", rank, cellValue);
                     onlyFirst = false;
                 }
                 // 4
@@ -330,7 +364,9 @@ int main(int argc, char *argv[])
                          0, // (rank - 1) + (msgTag - 1) * (numProc - 1)
                          (rank - 1) + (i - 1) * (numProc - 1), // снова превратить в номер строки
                          MPI_COMM_WORLD);
+            
             }
+            // printf("Proc %d last step %d\n",rank,st++);
         }
     }
 
